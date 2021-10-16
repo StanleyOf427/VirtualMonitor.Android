@@ -1,2 +1,1 @@
-# VirtualMonitor.Android
-Deisplay virtual monitors and desktops on your headset.
+﻿# VirtualMonitor.AndroidDeisplay virtual monitors and desktops on your headset.##Build EnvironmentIDE:Android Studio 2020.3.1 Patch 2(Windows)NDK:R21SDK:R21

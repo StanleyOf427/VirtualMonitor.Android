@@ -1,0 +1,14 @@
+prefix=/home/stanley/application/Android/ffmpeg-4.4/android/armv7-a
+exec_prefix=${prefix}
+libdir=/home/stanley/application/Android/ffmpeg-4.4/android/armv7-a/lib
+includedir=/home/stanley/application/Android/ffmpeg-4.4/android/armv7-a/include
+
+Name: libavutil
+Description: FFmpeg utility library
+Version: 56.70.100
+Requires: 
+Requires.private: 
+Conflicts:
+Libs: -L${libdir}  -lavutil 
+Libs.private: -pthread -lm
+Cflags: -I${includedir}

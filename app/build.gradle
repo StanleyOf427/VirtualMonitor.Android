@@ -1,0 +1,73 @@
+apply plugin: 'com.android.application'
+
+android {
+    compileSdkVersion 31
+//        publishNonDefault true
+
+    defaultConfig {
+        applicationId "com.stanley.virtualmonitor"
+        minSdkVersion 25
+        targetSdkVersion 31
+        versionCode 1
+        versionName "1.0"
+        compileOptions {
+            sourceCompatibility JavaVersion.VERSION_1_8
+            targetCompatibility JavaVersion.VERSION_1_8
+        }
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++11 -frtti -fexceptions"
+                arguments "-DANDROID_STL=c++_shared"
+//                abiFilters 'arm64-v8a' //指定cpu的架构
+                abiFilters 'armeabi-v7a' //指定cpu的架构
+            }
+        }
+        ndk {
+            abiFilters "armeabi-v7a"
+//            abiFilters "arm64-v8a"
+//    abiFilters "i386"
+        }
+
+//        ndk {
+//            abiFilters  "armeabi-v8a"
+//        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    sourceSets {
+        main {
+//            jniLibs.srcDirs = ['libs']//gradle 插件4.0以上不需要该行，否则会注入失败：https://developer.android.com/studio/releases/gradle-plugin#cmake-imported-targets
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = 1.8
+        targetCompatibility = 1.8
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"  //指定CMakeLists.txt的路径，这里表示是在app目录下
+//            version "3.6.0"
+        }
+    }
+
+    buildToolsVersion = '25.0.3'
+    buildToolsVersion '31.0.0'
+    ndkVersion '21.4.7075529'
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation 'androidx.leanback:leanback:1.0.0'
+    implementation 'androidx.appcompat:appcompat:1.2.0'
+    implementation 'com.github.bumptech.glide:glide:3.8.0'
+    //butterknife
+    implementation 'com.jakewharton:butterknife:10.1.0'
+    annotationProcessor 'com.jakewharton:butterknife-compiler:10.1.0'
+
+}
