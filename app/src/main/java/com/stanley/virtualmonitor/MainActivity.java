@@ -19,6 +19,19 @@ import android.content.res.AssetManager;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.app.Activity;
+
+import android.os.Bundle;
+
+import android.view.KeyEvent;
+
+import android.view.MotionEvent;
+
+import android.view.View;
+
+import android.widget.Button;
+
+import android.widget.Toast;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.os.Bundle;
@@ -112,7 +125,6 @@ private TCPServer _tcpserver;
 
         mediaCodecBufferInfo = new MediaCodec.BufferInfo();
     }
-
 
 
     //region Test
@@ -459,13 +471,22 @@ private TCPServer _tcpserver;
                 Log.d(TAG,"back--->");
 
 //模拟器测试使用
-                AnalyseData();
-                StartPlay();
+//                AnalyseData();
+//                StartPlay();
 
 
                 if (lastClickTime <= 0) {
-                    Toast.makeText(this, "再按一次后退键退出应用", Toast.LENGTH_SHORT).show();
-                    lastClickTime = System.currentTimeMillis();
+//                    Toast.makeText(this, "再按一次后退键退出应用", Toast.LENGTH_SHORT).show();
+//                    lastClickTime = System.currentTimeMillis();
+
+                    //暂时放这里
+                    Log.d(TAG, "touch--->");
+//                Log.d(TAG,JNIUtils.stringFromJNI());
+
+                    String path = "/sdcard/Android/data/com.stanley.virtualmonitor/20210604-1504-21 (copy).mp4";
+                    surfaceView = (SurfaceView) findViewById(R.id.testview);
+                    holder = surfaceView.getHolder();
+                    JNIUtils.testDecode(path,holder.getSurface());
                     return true;
                 }
                 else {
@@ -540,7 +561,7 @@ private TCPServer _tcpserver;
                 Log.d(TAG, "up--->");
 //                Log.d(TAG,JNIUtils.stringFromJNI());
 
-                String path = "/storage/emulated/0/Download/20210604-1504-21 (copy).mp4";
+                String path = "/sdcard/Android/data/com.stanley.virtualmonitor/20210604-1504-21 (copy).mp4";
                 surfaceView = (SurfaceView) findViewById(R.id.testview);
                 holder = surfaceView.getHolder();
                 JNIUtils.testDecode(path,holder.getSurface());
@@ -580,6 +601,19 @@ private TCPServer _tcpserver;
 //            super.handleMessage(msg);
 //        }
 //    };
+
+//    public void onClick(View v) {
+//        Log.d(TAG, "click--->");
+////                Log.d(TAG,JNIUtils.stringFromJNI());
+//
+//        String path = "/storage/emulated/0/Download/20210604-1504-21 (copy).mp4";
+//        surfaceView = (SurfaceView) findViewById(R.id.testview);
+//        holder = surfaceView.getHolder();
+//        JNIUtils.testDecode(path,holder.getSurface());
+//
+//
+//             }
+
 
 
     //region surfaceview

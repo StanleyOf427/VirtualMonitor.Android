@@ -161,7 +161,7 @@ Java_com_stanley_virtualmonitor_JNIUtils_testDecode(JNIEnv *env, jclass jcls,
 
     LOGE("完成播放!");
     //    sws_freeContext(&sws_ctx);
-    av_free(&packet);
+    av_free(packet);
     LOGE("释放packet\n");
     av_frame_free(&yuvFrame);
     LOGE("释放yuvFrame\n");
