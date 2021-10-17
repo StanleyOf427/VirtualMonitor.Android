@@ -475,30 +475,47 @@ private TCPServer _tcpserver;
 //                StartPlay();
 
 
-                if (lastClickTime <= 0) {
+//                if (lastClickTime <= 0) {
 //                    Toast.makeText(this, "再按一次后退键退出应用", Toast.LENGTH_SHORT).show();
 //                    lastClickTime = System.currentTimeMillis();
 
-                    //暂时放这里
-                    Log.d(TAG, "touch--->");
+                    //region 暂时放这里
 //                Log.d(TAG,JNIUtils.stringFromJNI());
 
-                    String path = "/sdcard/Android/data/com.stanley.virtualmonitor/20210604-1504-21 (copy).mp4";
-                    surfaceView = (SurfaceView) findViewById(R.id.testview);
-                    holder = surfaceView.getHolder();
-                    JNIUtils.testDecode(path,holder.getSurface());
-                    return true;
-                }
-                else {
-                    long currentClickTime = System.currentTimeMillis();
-                    if (currentClickTime - lastClickTime < 2000) {
-                        task.cancel();
-                        finish();
-                    } else {
-                        Toast.makeText(this, "再按一次后退键退出应用", Toast.LENGTH_SHORT).show();
-                        lastClickTime = System.currentTimeMillis();
-                    }
-                }
+//                    String path = "/sdcard/Android/data/com.stanley.virtualmonitor/20210604-1504-21 (copy).mp4";
+//                    surfaceView = (SurfaceView) findViewById(R.id.testview);
+//                    holder = surfaceView.getHolder();
+//                    JNIUtils.testDecode(path,holder.getSurface());
+
+                AnalyseData();
+//                new Thread(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        StartDecode(data);
+//                    }
+//                }).start();
+//                new Thread(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        RenderView();
+//                    }
+//                }).start();
+                StartPlay();
+                //endregion
+
+//                }
+//                else {
+//                    long currentClickTime = System.currentTimeMillis();
+//                    if (currentClickTime - lastClickTime < 2000) {
+//                        task.cancel();
+//                        finish();
+//                    } else {
+//                        Toast.makeText(this, "再按一次后退键退出应用", Toast.LENGTH_SHORT).show();
+//                        lastClickTime = System.currentTimeMillis();
+//                    }
+//                }
+
+                break;
 
             case KeyEvent.KEYCODE_SETTINGS: //设置键
                 Log.d(TAG, "setting--->");
@@ -561,10 +578,13 @@ private TCPServer _tcpserver;
                 Log.d(TAG, "up--->");
 //                Log.d(TAG,JNIUtils.stringFromJNI());
 
-                String path = "/sdcard/Android/data/com.stanley.virtualmonitor/20210604-1504-21 (copy).mp4";
-                surfaceView = (SurfaceView) findViewById(R.id.testview);
-                holder = surfaceView.getHolder();
-                JNIUtils.testDecode(path,holder.getSurface());
+                //region using ffmpeg
+//                String path = "/sdcard/Android/data/com.stanley.virtualmonitor/20210604-1504-21 (copy).mp4";
+//                surfaceView = (SurfaceView) findViewById(R.id.testview);
+//                holder = surfaceView.getHolder();
+//                JNIUtils.testDecode(path,holder.getSurface());
+                //endregion
+
                 break;
 
             case KeyEvent.KEYCODE_DPAD_LEFT: //向左键
