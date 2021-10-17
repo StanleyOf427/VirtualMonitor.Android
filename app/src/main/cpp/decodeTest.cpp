@@ -168,14 +168,43 @@ while(avcodec_receive_frame(p_AVCodecContext, pFrame)==0)
    uint8_t  *pFrameBuffer = (uint8_t *) av_malloc(bufferSize * sizeof(uint8_t));
    av_image_fill_arrays(pRGBAFrame->data,pRGBAFrame->linesize,pFrameBuffer,AV_PIX_FMT_RGBA,
                         width,height,1);
+   int windowWidth=ANativeWindow_getWidth(nativeWindow);
+   int windowHeight=ANativeWindow_getHeight(nativeWindow);
+   int dstWidth,dstHeight;
+   if(windowWidth<windowHeight*width/height)
+   {
+       dstWidth=windowWidth;
+       dstHeight=windowWidth*height/width;
+   }
+   else
+   {
+       dstWidth=windowHeight*width/height;
+       dstHeight=height;
+   }
     SwsContext *pSwsCtx= sws_getContext(width, height, p_AVCodecContext->pix_fmt,
-                     1080,1920 , AV_PIX_FMT_RGBA,
+                                        dstWidth,
+                                        dstHeight,
+                                        AV_PIX_FMT_RGBA,
                      SWS_FAST_BILINEAR, NULL, NULL, NULL);
   int swsrst=  sws_scale(pSwsCtx,pFrame->data,pFrame->linesize,0,height,pRGBAFrame->data,pRGBAFrame->linesize);
   if(swsrst!=0)
   {
       LOGE("%s","像素转换出错！");
   }
+
+
+
+    //渲染
+    ANativeWindow_setBuffersGeometry(nativeWindow,width,height,WINDOW_FORMAT_RGBA_8888);
+    ANativeWindow_lock(nativeWindow, &windowBuffer, nullptr);
+    uint8_t *dstBuffer=static_cast<uint8_t *>(windowBuffer.bits);
+    int srcLineSize=pRGBAFrame->linesize[0];//输入图像步长
+    int dstLineSize=windowBuffer.stride*4;//RGBA缓冲区步长
+    for(int i=0;i<height;++i)
+    {
+        memcpy(dstBuffer+i*dstLineSize,pFrameBuffer+i*srcLineSize,srcLineSize);
+    }
+    ANativeWindow_unlockAndPost(nativeWindow);
     if(pRGBAFrame!= nullptr)
     {
         av_frame_free(&pRGBAFrame);
@@ -190,23 +219,6 @@ while(avcodec_receive_frame(p_AVCodecContext, pFrame)==0)
     {
         sws_freeContext(pSwsCtx);
         pSwsCtx= nullptr;
-    }
-
-
-    //渲染
-    ANativeWindow_setBuffersGeometry(nativeWindow,width,height,WINDOW_FORMAT_RGBA_8888);
-    ANativeWindow_lock(nativeWindow, &windowBuffer, nullptr);
-    uint8_t *dstBuffer=static_cast<uint8_t *>(windowBuffer.bits);
-    int srcLineSize=pRGBAFrame->linesize[0];//输入图像步长
-    int dstLineSize=windowBuffer.stride*4;//RGBA缓冲区步长
-    for(int i=0;i<height;++i)
-    {
-        memcpy(dstBuffer+i*dstLineSize,pFrameBuffer+i*srcLineSize,srcLineSize);
-    }
-    ANativeWindow_unlockAndPost(nativeWindow);
-    if(nativeWindow!= nullptr)
-    {
-        ANativeWindow_release(nativeWindow);
     }
 }
 
@@ -229,9 +241,13 @@ while(avcodec_receive_frame(p_AVCodecContext, pFrame)==0)
 //              }
 //              ANativeWindow_unlockAndPost(nativeWindow);
 //          }
+
+
       }
+
       av_packet_unref(packet);
   }
+
 #pragma endregion
 
 #pragma endregion
@@ -270,5 +286,10 @@ if(pFormatCtx!= nullptr)
 }
     avformat_close_input(&pFormatCtx);
 //    avformat_free_context(pFormatCtx);
+
+    if(nativeWindow!= nullptr)
+    {
+        ANativeWindow_release(nativeWindow);
+    }
     return 0;
 }
