@@ -91,6 +91,9 @@ Java_com_stanley_virtualmonitor_JNIUtils_CorePlayer(JNIEnv *env, jclass jcls, js
     #pragma region 初始化部分
     player_data *pd = (player_data *) malloc(sizeof(player_data));
     pd->jniEnv = env;
+    *env->GetJavaVM(env,&pd->vm);//?1
+    pd->Player = (*pd->jniEnv)->NewGlobalRef(pd->jniEnv, instance);
+
 
     #pragma endregion
 }
