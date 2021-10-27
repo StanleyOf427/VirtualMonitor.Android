@@ -63,7 +63,7 @@ public class AsyncDecoder {
 //                    -76,0x38,0x65,-64
 //            };
             byte[] header_sps = {
-                    0,
+//                    0,
                     0, 0, 1,
                     103,
                     39,77,0,42 ,
@@ -82,7 +82,7 @@ public class AsyncDecoder {
 //                    0x28, -18, 0x3c, -128,00};
 //
             byte[] header_pps = {
-                    0,
+//                    0,
                     0 ,0, 1,
                     104,
                     40, -18, 60, -128,0};
@@ -139,7 +139,6 @@ public class AsyncDecoder {
                     Log.d("flag", flag+"");
                     mediaCodec.queueInputBuffer(index, 0, input.length, computePresentationTime(index), flag);
 //                    mediaCodec.queueInputBuffer(index, 0, input.length, 0, flag);
-
                 }
             }
 

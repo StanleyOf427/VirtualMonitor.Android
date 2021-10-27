@@ -199,6 +199,7 @@ private TCPServer _tcpserver;
             }
         }).start();
     }
+
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
 
@@ -470,51 +471,20 @@ private TCPServer _tcpserver;
             case KeyEvent.KEYCODE_BACK:    //返回键
                 Log.d(TAG,"back--->");
 
-//模拟器测试使用
-//                AnalyseData();
-//                StartPlay();
-
-
-//                if (lastClickTime <= 0) {
-//                    Toast.makeText(this, "再按一次后退键退出应用", Toast.LENGTH_SHORT).show();
-//                    lastClickTime = System.currentTimeMillis();
-
-                    //region 暂时放这里
-//                Log.d(TAG,JNIUtils.stringFromJNI());
-
-//                    String path = "/sdcard/Android/data/com.stanley.virtualmonitor/20210604-1504-21 (copy).mp4";
-//                    surfaceView = (SurfaceView) findViewById(R.id.testview);
-//                    holder = surfaceView.getHolder();
-//                    JNIUtils.testDecode(path,holder.getSurface());
-
-                AnalyseData();
-//                new Thread(new Runnable() {
-//                    @Override
-//                    public void run() {
-//                        StartDecode(data);
-//                    }
-//                }).start();
-//                new Thread(new Runnable() {
-//                    @Override
-//                    public void run() {
-//                        RenderView();
-//                    }
-//                }).start();
-                StartPlay();
-                //endregion
-
-//                }
-//                else {
-//                    long currentClickTime = System.currentTimeMillis();
-//                    if (currentClickTime - lastClickTime < 2000) {
-//                        task.cancel();
-//                        finish();
-//                    } else {
-//                        Toast.makeText(this, "再按一次后退键退出应用", Toast.LENGTH_SHORT).show();
-//                        lastClickTime = System.currentTimeMillis();
-//                    }
-//                }
-
+                if (lastClickTime <= 0) {
+                    Toast.makeText(this, "再按一次后退键退出应用", Toast.LENGTH_SHORT).show();
+                    lastClickTime = System.currentTimeMillis();
+                }
+                else {
+                    long currentClickTime = System.currentTimeMillis();
+                    if (currentClickTime - lastClickTime < 2000) {
+                        task.cancel();
+                        finish();
+                    } else {
+                        Toast.makeText(this, "再按一次后退键退出应用", Toast.LENGTH_SHORT).show();
+                        lastClickTime = System.currentTimeMillis();
+                    }
+                }
                 break;
 
             case KeyEvent.KEYCODE_SETTINGS: //设置键
@@ -601,6 +571,35 @@ private TCPServer _tcpserver;
 
             case KeyEvent.KEYCODE_VOLUME_UP:   //调大声音键
                 Log.d(TAG, "voice up--->");
+
+//测试使用
+                AnalyseData();
+                StartPlay();
+
+                //region 暂时放这里
+//                Log.d(TAG,JNIUtils.stringFromJNI());
+
+//                    String path = "/sdcard/Android/data/com.stanley.virtualmonitor/20210604-1504-21 (copy).mp4";
+//                    surfaceView = (SurfaceView) findViewById(R.id.testview);
+//                    holder = surfaceView.getHolder();
+//                    JNIUtils.testDecode(path,holder.getSurface());
+
+
+
+//                new Thread(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        StartDecode(data);
+//                    }
+//                }).start();
+//                new Thread(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        RenderView();
+//                    }
+//                }).start();
+                //endregion
+
                 break;
 
             case KeyEvent.KEYCODE_VOLUME_DOWN: //降低声音键
