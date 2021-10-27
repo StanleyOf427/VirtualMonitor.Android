@@ -15,6 +15,10 @@ add_library(decodeTest
         SHARED
         decodeTest.cpp)
 
+add_library(CorePlayer
+        SHARED
+        CorePlayer.c)
+
 find_library(
         log-lib
         log)
@@ -95,6 +99,7 @@ set_target_properties(swscale PROPERTIES IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/.
 #混合编译到所需库中
 target_link_libraries(
         decodeTest
+        CorePlayer
         ${log-lib}
         avcodec#1
         avdevice#2
