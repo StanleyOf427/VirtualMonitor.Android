@@ -10,6 +10,10 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+import android.graphics.SurfaceTexture;
+import android.view.Surface;
+
+
 public class Player  implements Serializable{
 //    private OnErrorCodeListener onErrorCodeListener;
     private OnPlayerStatusChangeListener onPlayerStatusChangeListener;
@@ -69,17 +73,17 @@ public class  HwDecodeBridge {
                         format.setByteBuffer("csd-1", csd1);
                     }
                     break;
-//                case "video/hevc":
-//                    if(csd0 != null){
-//                        format.setByteBuffer("csd-0", csd0);
-//                    }
-//                    break;
-//                case "video/mp4v-es":
-//                    format.setByteBuffer("csd-0", csd0);
-//                    break;
-//                case "video/3gpp":
-//                    format.setByteBuffer("csd-0", csd0);
-//                    break;
+/*                case "video/hevc":
+                   if(csd0 != null){
+                       format.setByteBuffer("csd-0", csd0);
+                   }
+                   break;
+               case "video/mp4v-es":
+                   format.setByteBuffer("csd-0", csd0);
+                   break;
+               case "video/3gpp":
+                   format.setByteBuffer("csd-0", csd0);
+                   break; */
                 default:
                     break;
             }
@@ -154,7 +158,7 @@ public class  HwDecodeBridge {
     }
 
     public static ByteBuffer getOutputBuffer(int id){
-//        ByteBuffer ret = codec.getOutputBuffer(id);
+    //        ByteBuffer ret = codec.getOutputBuffer(id);
         return codec.getOutputBuffers()[id];
     }
 
@@ -166,6 +170,34 @@ public class  HwDecodeBridge {
 
         outputSurface = sur;
 
+    }
+}
+
+
+public class SurfaceTextureBridge {
+    private static SurfaceTexture texture;
+    private static Surface surface;
+    private static float[] matrix = new float[16];
+
+    public static Surface getSurface(int name){
+        texture = new SurfaceTexture(name);
+        surface = new Surface(texture);
+        HwDecodeBridge.setOutputSurface(surface);
+        return surface;
+    }
+
+    public static void updateTexImage(){
+        texture.updateTexImage();
+    }
+
+    public static float[] getTransformMatrix(){
+        texture.getTransformMatrix(matrix);
+        return matrix;
+    }
+
+    public static void release(){
+        texture.release();
+        surface.release();
     }
 }
 
