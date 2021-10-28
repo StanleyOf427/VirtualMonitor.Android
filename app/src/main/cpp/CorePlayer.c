@@ -92,7 +92,7 @@ typedef struct player_data {
     player_frame_queue *video_frame_queue;
 
     //frame参数
-    xl_video_render_context *video_render_ctx;
+    video_render_context *video_render_ctx;
     AVFrame *video_frame;
     int width, height;
     int frame_rotation;
@@ -368,6 +368,28 @@ mediacodec_context *create_mediacodec_context(player_data *pd) {
     return ctx;
 }
 
+static void set_renderwindow(player_data * pd) {
+    video_render_context *ctx = pd->video_render_ctx;
+    if(ctx->display == EGL_NO_DISPLAY){
+        init_egl(pd);
+    }else {
+        glClear(GL_COLOR_BUFFER_BIT);
+        eglSwapBuffers(ctx->display, ctx->surface);
+        eglDestroySurface(ctx->display, ctx->surface);
+
+        ctx->surface = eglCreateWindowSurface(ctx->display, ctx->config, ctx->window, NULL);
+        EGLint err = eglGetError();
+        if (err != EGL_SUCCESS) {
+            LOGE("egl error");
+        }
+        if (eglMakeCurrent(ctx->display, ctx->surface, ctx->surface, ctx->context) == EGL_FALSE) {
+            LOGE("------EGL-FALSE");
+        }
+        eglQuerySurface(ctx->display, ctx->surface, EGL_WIDTH, &ctx->width);
+        eglQuerySurface(ctx->display, ctx->surface, EGL_HEIGHT, &ctx->height);
+    }
+}
+
 #pragma region 资源释放
 void frame_queue_free(frame_queue *queue){
     pthread_mutex_destroy(queue->mutex);
@@ -420,7 +442,7 @@ pd->statistics = statistics_create(pd->jniEnv);
  av_register_all();
     avfilter_register_all();
     avformat_network_init();
-pd->video_render_ctx = xl_video_render_ctx_create();
+pd->video_render_ctx = video_render_ctx_create();
     pd->main_looper = ALooper_forThread();
 pipe(pd->pipe_fd);
   if (ALooper_addFd(pd->main_looper, pd->pipe_fd[0], ALOOPER_POLL_CALLBACK, ALOOPER_EVENT_INPUT,
