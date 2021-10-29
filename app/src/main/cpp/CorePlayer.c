@@ -610,6 +610,90 @@ static int message_callback(int fd, int events, void *data) {
 }
 
 
+mediacodec_context *create_mediacodec_context(player_data *pd) {
+    xl_mediacodec_context *ctx = (xl_mediacodec_context *) malloc(sizeof(xl_mediacodec_context));
+    AVCodecParameters *codecpar = pd->format_context->streams[pd->video_index]->codecpar;
+    ctx->width = codecpar->width;
+    ctx->height = codecpar->height;
+    ctx->codec_id = codecpar->codec_id;
+    ctx->nal_size = 0;
+    ctx->format = AMediaFormat_new();
+    ctx->pix_format = AV_PIX_FMT_NONE;
+//    "video/x-vnd.on2.vp8" - VP8 video (i.e. video in .webm)
+//    "video/x-vnd.on2.vp9" - VP9 video (i.e. video in .webm)
+//    "video/avc" - H.264/AVC video
+//    "video/hevc" - H.265/HEVC video
+//    "video/mp4v-es" - MPEG4 video
+//    "video/3gpp" - H.263 video
+    switch (ctx->codec_id) {
+        case AV_CODEC_ID_H264:
+            ctx->codec = AMediaCodec_createDecoderByType("video/avc");
+            AMediaFormat_setString(ctx->format, AMEDIAFORMAT_KEY_MIME, "video/avc");
+            if (codecpar->extradata[0] == 1) {
+                size_t sps_size, pps_size;
+                uint8_t *sps_buf;
+                uint8_t *pps_buf;
+                sps_buf = (uint8_t *) malloc((size_t) codecpar->extradata_size + 20);
+                pps_buf = (uint8_t *) malloc((size_t) codecpar->extradata_size + 20);
+                if (0 != convert_sps_pps2(codecpar->extradata, (size_t) codecpar->extradata_size,
+                                          sps_buf, &sps_size, pps_buf, &pps_size, &ctx->nal_size)) {
+                    LOGE("%s:convert_sps_pps: failed\n", __func__);
+                }
+                AMediaFormat_setBuffer(ctx->format, "csd-0", sps_buf, sps_size);
+                AMediaFormat_setBuffer(ctx->format, "csd-1", pps_buf, pps_size);
+                free(sps_buf);
+                free(pps_buf);
+            }
+            break;
+        case AV_CODEC_ID_HEVC:
+            ctx->codec = AMediaCodec_createDecoderByType("video/hevc");
+            AMediaFormat_setString(ctx->format, AMEDIAFORMAT_KEY_MIME, "video/hevc");
+            if (codecpar->extradata_size > 3 &&
+                (codecpar->extradata[0] == 1 || codecpar->extradata[1] == 1)) {
+                size_t sps_pps_size = 0;
+                size_t convert_size = (size_t) (codecpar->extradata_size + 20);
+                uint8_t *convert_buf = (uint8_t *) malloc((size_t) convert_size);
+                if (0 != convert_hevc_nal_units(codecpar->extradata, (size_t) codecpar->extradata_size,
+                                                convert_buf, convert_size, &sps_pps_size,
+                                                &ctx->nal_size)) {
+                    LOGE("%s:convert_sps_pps: failed\n", __func__);
+                }
+                AMediaFormat_setBuffer(ctx->format, "csd-0", convert_buf, sps_pps_size);
+                free(convert_buf);
+            }
+            break;
+        case AV_CODEC_ID_MPEG4:
+            ctx->codec = AMediaCodec_createDecoderByType("video/mp4v-es");
+            AMediaFormat_setString(ctx->format, AMEDIAFORMAT_KEY_MIME, "video/mp4v-es");
+            AMediaFormat_setBuffer(ctx->format, "csd-0", codecpar->extradata,
+                                   (size_t) codecpar->extradata_size);
+            break;
+        case AV_CODEC_ID_VP8:
+            ctx->codec = AMediaCodec_createDecoderByType("video/x-vnd.on2.vp8");
+            AMediaFormat_setString(ctx->format, AMEDIAFORMAT_KEY_MIME, "video/x-vnd.on2.vp8");
+            break;
+        case AV_CODEC_ID_VP9:
+            ctx->codec = AMediaCodec_createDecoderByType("video/x-vnd.on2.vp9");
+            AMediaFormat_setString(ctx->format, AMEDIAFORMAT_KEY_MIME, "video/x-vnd.on2.vp9");
+            break;
+        case AV_CODEC_ID_H263:
+            ctx->codec = AMediaCodec_createDecoderByType("video/3gpp");
+            AMediaFormat_setString(ctx->format, AMEDIAFORMAT_KEY_MIME, "video/3gpp");
+            AMediaFormat_setBuffer(ctx->format, "csd-0", codecpar->extradata,
+                                   (size_t) codecpar->extradata_size);
+            break;
+        default:
+            break;
+    }
+//    AMediaFormat_setInt32(ctx->format, "rotation-degrees", 90);
+    AMediaFormat_setInt32(ctx->format, AMEDIAFORMAT_KEY_WIDTH, ctx->width);
+    AMediaFormat_setInt32(ctx->format, AMEDIAFORMAT_KEY_HEIGHT, ctx->height);
+//    media_status_t ret = AMediaCodec_configure(ctx->codec, ctx->format, NULL, NULL, 0);
+
+    return ctx;
+}
+
+
 #pragma endregion
 
 
@@ -647,9 +731,9 @@ pipe(pd->pipe_fd);
     // pd->change_status = change_status;
     pd->send_message = send_message;
     pd->on_error = on_error_cb;
-//   reset_pd(pd);
+    reset_pd(pd);
 
-    pd->mediacodec_ctx = xl_create_mediacodec_context(pd);
+    pd->mediacodec_ctx =create_mediacodec_context(pd);
 
 #pragma endregion
 
