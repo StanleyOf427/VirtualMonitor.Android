@@ -121,17 +121,17 @@ typedef struct player_data {
     int error_code;
 
     // 统计
-    xl_statistics *statistics;
+    statistics *statistics;
 
     // message
     ALooper *main_looper;
     int pipe_fd[2];
 
-    void (*send_message)(struct struct_xl_play_data *pd, int message);
+    void (*send_message)(struct struct_player_data *pd, int message);
 
 //    void (*change_status)(struct struct_xl_play_data *pd, PlayStatus status);
 
-    void (*on_error)(struct struct_xl_play_data * pd, int error_code);
+    void (*on_error)(struct struct_player_data * pd, int error_code);
 } player_data;
 
 typedef struct struct_packet_queue {
@@ -288,7 +288,7 @@ void packet_pool_unref_packet(pakcet_pool * pool, AVPacket * packet){
     pool->count--;
 }
 
-void xl_mediacodec_release_context(player_data *pd) {
+void mediacodec_release_context(player_data *pd) {
     JNIEnv *jniEnv = pd->jniEnv;
     player_java_class * jc = pd->jc;
     (*jniEnv)->CallStaticVoidMethod(jniEnv, jc->HwDecodeBridge, jc->codec_release);
@@ -296,6 +296,12 @@ void xl_mediacodec_release_context(player_data *pd) {
     free(ctx);
     pd->mediacodec_ctx = NULL;
 }
+
+void packet_pool_reset(pakcet_pool * pool){
+    pool->count = 0;
+    pool->index = 0;
+}
+
 static void reset_pd(player_data *pd) {
     if (pd == NULL) return;
     pd->eof = false;
@@ -308,7 +314,6 @@ static void reset_pd(player_data *pd) {
     clock_reset(pd->video_clock);
     statistics_reset(pd->statistics);
     pd->error_code = 0;
-    pd->frame_rotation = ROTATION_0;
     packet_pool_reset(pd->packet_pool);
     pd->change_status(pd, IDEL);
     video_render_ctx_reset(pd->video_render_ctx);
@@ -319,10 +324,7 @@ void frame_pool_unref_frame(frame_pool * pool, AVFrame * frame){
     pool->count--;
 }
 
-void packet_pool_reset(pakcet_pool * pool){
-    pool->count = 0;
-    pool->index = 0;
-}
+
 
 static inline void clean_queues(player_data *pd) {
     AVPacket *packet;
@@ -572,7 +574,7 @@ static int stop(player_data *pd) {
     pthread_join(pd->read_stream_thread, &thread_res);
     if ((pd->av_track_flags & HAS_VIDEO_FLAG) > 0) {
         pthread_join(pd->video_decode_thread, &thread_res);
-        xl_mediacodec_release_context(pd);
+        mediacodec_release_context(pd);
         pthread_join(pd->gl_thread, &thread_res);
     }
 
@@ -693,7 +695,15 @@ mediacodec_context *create_mediacodec_context(player_data *pd) {
     return ctx;
 }
 
+static void send_message(player_data *pd, int message) {
+    int sig = message;
+    write(pd->pipe_fd[1], &sig, sizeof(int));
+}
 
+static void on_error_cb(player_data *pd, int error_code) {
+    pd->error_code = error_code;
+    pd->send_message(pd, MESSAGE_ERROR);
+}
 #pragma endregion
 
 
