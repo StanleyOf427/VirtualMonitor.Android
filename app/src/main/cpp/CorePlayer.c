@@ -14,15 +14,29 @@
 
  #include <android/native_window.h>
  #include <android/native_window_jni.h>
-
+#include <android/looper.h>
  #include <android/log.h>
  #include <jni.h>
+
+#include <unistd.h>
+#include <pthread.h>
+
+#if __ANDROID_API__ >= NDK_MEDIACODEC_VERSION
+#include <media/NdkMediaCodec.h>
+#endif
 // #include <cstdio>
 // #include <cstdlib>
 #pragma region 默认设置
 #define DEFAULT_BUFFERSIZE 1024*1024*5
 #define DEFAULT_BUFFERTIME 0.1f
 #define DEFAULT_READ_TIMEOUT 0.1f
+
+#define MESSAGE_STOP 1
+#define MESSAGE_BUFFER_EMPTY 2
+#define MESSAGE_BUFFER_FULL 3
+#define MESSAGE_ERROR 999
+
+#define HAS_VIDEO_FLAG 0x2
 
 #pragma endregion
 
@@ -196,10 +210,167 @@ typedef struct struct_video_render_context {
 
 } video_render_context;
 
+typedef struct struct_mediacodec_context {
+    JNIEnv *jniEnv;
+#if __ANDROID_API__ >= NDK_MEDIACODEC_VERSION
+    AMediaCodec *codec;
+    AMediaFormat *format;
+#endif
+    size_t nal_size;
+    int width, height;
+    enum AVPixelFormat pix_format;
+    enum AVCodecID codec_id;
+} mediacodec_context;
 
+typedef struct struct_statistics {
+    int64_t last_update_time;
+    int64_t last_update_bytes;
+    int64_t last_update_frames;
+    int64_t bytes;
+    int64_t frames;
+    uint8_t *ret_buffer;
+    jobject ret_buffer_java;
+} statistics;
 #pragma endregion
 
 #pragma region 工具函数
+AVFrame *  frame_queue_get(frame_queue *queue){
+    pthread_mutex_lock(queue->mutex);
+    if(queue->count == 0){
+        pthread_mutex_unlock(queue->mutex);
+        return NULL;
+    }
+    AVFrame * frame = queue->frames[queue->readIndex];
+    queue->readIndex = (queue->readIndex + 1) % queue->size;
+    queue->count--;
+    pthread_cond_signal(queue->cond);
+    pthread_mutex_unlock(queue->mutex);
+    return frame;
+}
+
+AVPacket *packet_queue_get(packet_queue *queue) {
+    pthread_mutex_lock(queue->mutex);
+    if (queue->count == 0) {
+        pthread_mutex_unlock(queue->mutex);
+        if (queue->empty_cb != NULL) {
+            queue->empty_cb(queue->cb_data);
+        }
+        return NULL;
+    }
+    AVPacket *packet = queue->packets[queue->readIndex];
+    queue->readIndex = (queue->readIndex + 1) % queue->size;
+    queue->count--;
+    queue->duration -= packet->duration;
+    queue->total_bytes -= packet->size;
+    pthread_cond_signal(queue->cond);
+    pthread_mutex_unlock(queue->mutex);
+    return packet;
+}
+
+void statistics_reset(statistics *s) {
+    s->last_update_time = 0;
+    s->last_update_bytes = 0;
+    s->last_update_frames = 0;
+    s->bytes = 0;
+    s->frames = 0;
+}
+
+#pragma region 资源释放
+void frame_queue_free(frame_queue *queue){
+    pthread_mutex_destroy(queue->mutex);
+    pthread_cond_destroy(queue->cond);
+    free(queue->frames);
+    free(queue);
+}
+
+void packet_pool_unref_packet(pakcet_pool * pool, AVPacket * packet){
+    av_packet_unref(packet);
+    pool->count--;
+}
+
+void xl_mediacodec_release_context(player_data *pd) {
+    JNIEnv *jniEnv = pd->jniEnv;
+    player_java_class * jc = pd->jc;
+    (*jniEnv)->CallStaticVoidMethod(jniEnv, jc->HwDecodeBridge, jc->codec_release);
+    mediacodec_context *ctx = pd->mediacodec_ctx;
+    free(ctx);
+    pd->mediacodec_ctx = NULL;
+}
+static void reset_pd(player_data *pd) {
+    if (pd == NULL) return;
+    pd->eof = false;
+    pd->video_index = -1;
+    pd->width = 0;
+    pd->height = 0;
+    pd->video_frame = NULL;
+    pd->seeking = 0;
+    pd->timeout_start = 0;
+    clock_reset(pd->video_clock);
+    statistics_reset(pd->statistics);
+    pd->error_code = 0;
+    pd->frame_rotation = ROTATION_0;
+    packet_pool_reset(pd->packet_pool);
+    pd->change_status(pd, IDEL);
+    video_render_ctx_reset(pd->video_render_ctx);
+}
+
+void frame_pool_unref_frame(frame_pool * pool, AVFrame * frame){
+    av_frame_unref(frame);
+    pool->count--;
+}
+
+void packet_pool_reset(pakcet_pool * pool){
+    pool->count = 0;
+    pool->index = 0;
+}
+
+static inline void clean_queues(player_data *pd) {
+    AVPacket *packet;
+    // clear pd->video_frame video_frame_queue video_frame_packet
+    if ((pd->av_track_flags & HAS_VIDEO_FLAG) > 0) {
+        if (pd->video_frame != NULL) {
+            if (pd->video_frame != &pd->video_frame_queue->flush_frame) {
+                frame_pool_unref_frame(pd->video_frame_pool, pd->video_frame);
+            }
+        }
+        while (1) {
+            pd->video_frame = frame_queue_get(pd->video_frame_queue);
+            if (pd->video_frame == NULL) {
+                break;
+            }
+            if (pd->video_frame != &pd->video_frame_queue->flush_frame) {
+                frame_pool_unref_frame(pd->video_frame_pool, pd->video_frame);
+            }
+        }
+        while (1) {
+            packet = packet_queue_get(pd->video_packet_queue);
+            if (packet == NULL) {
+                break;
+            }
+            if (packet != &pd->video_packet_queue->flush_packet) {
+                packet_pool_unref_packet(pd->packet_pool, packet);
+            }
+        }
+    }
+}
+
+
+static void reset(player_data *pd) {
+    if (pd == NULL) return;
+    pd->eof = false;
+    pd->av_track_flags = 0;
+    pd->width = 0;
+    pd->height = 0;
+    pd->video_frame = NULL;
+    pd->timeout_start = 0;
+    statistics_reset(pd->statistics);
+    pd->error_code = 0;
+    packet_pool_reset(pd->packet_pool);
+    pd->change_status(pd, IDEL);
+    video_render_ctx_reset(pd->video_render_ctx);
+}
+
+#pragma endregion
 
 void jni_reflect_java_class(player_java_class ** p_jc, JNIEnv *jniEnv) {
     player_java_class *  jc =malloc(sizeof(player_java_class));//??2  为何改为cpp后此处出现无法赋值问题
@@ -390,37 +561,61 @@ static void set_renderwindow(player_data * pd) {
     }
 }
 
-#pragma region 资源释放
-void frame_queue_free(frame_queue *queue){
-    pthread_mutex_destroy(queue->mutex);
-    pthread_cond_destroy(queue->cond);
-    free(queue->frames);
-    free(queue);
+static int stop(player_data *pd) {
+    // remove buffer call back
+    pd->video_packet_queue->empty_cb = NULL;
+    pd->video_packet_queue->full_cb = NULL;
+
+    clean_queues(pd);
+    // 停止各个thread
+    void *thread_res;
+    pthread_join(pd->read_stream_thread, &thread_res);
+    if ((pd->av_track_flags & HAS_VIDEO_FLAG) > 0) {
+        pthread_join(pd->video_decode_thread, &thread_res);
+        xl_mediacodec_release_context(pd);
+        pthread_join(pd->gl_thread, &thread_res);
+    }
+
+    clean_queues(pd);
+    avformat_close_input(&pd->format_context);
+    reset(pd);
+    LOGI("player stoped");
+    return 0;
+}
+
+static int message_callback(int fd, int events, void *data) {
+    player_data *pd = data;
+    int message;
+    for (int i = 0; i < events; i++) {
+        read(fd, &message, sizeof(int));
+        LOGI("recieve message ==> %d", message);
+        switch (message) {
+            case MESSAGE_STOP:
+                stop(pd);
+                break;
+            case MESSAGE_BUFFER_EMPTY:
+                change_status(pd, BUFFER_EMPTY);
+                break;
+            case MESSAGE_BUFFER_FULL:
+                change_status(pd, BUFFER_FULL);
+                break;
+            case MESSAGE_ERROR:
+                on_error(pd);
+                break;
+            default:
+                break;
+        }
+    }
+    return 1;
 }
 
 
-static void reset_pd(player_data *pd) {
-    if (pd == NULL) return;
-    pd->eof = false;
-    pd->video_index = -1;
-    pd->width = 0;
-    pd->height = 0;
-    pd->video_frame = NULL;
-    pd->seeking = 0;
-    pd->timeout_start = 0;
-    clock_reset(pd->video_clock);
-    statistics_reset(pd->statistics);
-    pd->error_code = 0;
-    pd->frame_rotation = ROTATION_0;
-    packet_pool_reset(pd->packet_pool);
-    pd->change_status(pd, IDEL);
-    video_render_ctx_reset(pd->video_render_ctx);
-}
 #pragma endregion
+
 
 //extern "C" JNIEXPORT int JNICALL//cpp
 JNIEXPORT int JNICALL
-Java_com_stanley_virtualmonitor_JNIUtils_CorePlayer(JNIEnv *env, jclass jcls, jstring input_jstr, jobject surface,int samplerate)
+Java_com_stanley_virtualmonitor_JNIUtils_CorePlayer(JNIEnv *env, jobject player_instance, jstring input_jstr, jobject surface,int samplerate)
 {
     #pragma region 初始化部分
     player_data *pd = (player_data *) malloc(sizeof(player_data));
@@ -428,7 +623,7 @@ Java_com_stanley_virtualmonitor_JNIUtils_CorePlayer(JNIEnv *env, jclass jcls, js
 /*
     *env->GetJavaVM(env,&pd->vm);//??1 为何需要获得此项？
 */
-    pd->Player = (*pd->jniEnv)->NewGlobalRef(pd->jniEnv, instance);
+    pd->player = (*pd->jniEnv)->NewGlobalRef(pd->jniEnv, player_instance);
     jni_reflect_java_class(&pd->jc, pd->jniEnv);
     pd->sample_rate=samplerate;
     pd->buffer_size_max=DEFAULT_BUFFERSIZE;
@@ -440,7 +635,7 @@ Java_com_stanley_virtualmonitor_JNIUtils_CorePlayer(JNIEnv *env, jclass jcls, js
     pd->packet_pool = packet_pool_create(400);
 pd->statistics = statistics_create(pd->jniEnv);
  av_register_all();
-    avfilter_register_all();
+//    avfilter_register_all();
     avformat_network_init();
 pd->video_render_ctx = video_render_ctx_create();
     pd->main_looper = ALooper_forThread();
@@ -458,7 +653,10 @@ pipe(pd->pipe_fd);
 
 #pragma endregion
 
+#pragma region开始解码播放
 
+
+#pragma endregion
 
 }
 
