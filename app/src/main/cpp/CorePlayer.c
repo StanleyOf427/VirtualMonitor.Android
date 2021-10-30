@@ -709,7 +709,7 @@ static void on_error_cb(player_data *pd, int error_code) {
 
 //extern "C" JNIEXPORT int JNICALL//cpp
 JNIEXPORT int JNICALL
-Java_com_stanley_virtualmonitor_JNIUtils_CorePlayer(JNIEnv *env, jobject player_instance, jstring input_jstr, jobject surface,int samplerate)
+Java_com_stanley_virtualmonitor_JNIUtils_CorePlayer(JNIEnv *env, jobject player_instance,, jobject surface,int samplerate)
 {
     #pragma region 初始化部分
     player_data *pd = (player_data *) malloc(sizeof(player_data));
@@ -719,6 +719,7 @@ Java_com_stanley_virtualmonitor_JNIUtils_CorePlayer(JNIEnv *env, jobject player_
 */
     pd->player = (*pd->jniEnv)->NewGlobalRef(pd->jniEnv, player_instance);
     jni_reflect_java_class(&pd->jc, pd->jniEnv);
+
     pd->sample_rate=samplerate;
     pd->buffer_size_max=DEFAULT_BUFFERSIZE;
     pd->buffer_time_length=DEFAULT_BUFFERTIME;
@@ -732,6 +733,13 @@ pd->statistics = statistics_create(pd->jniEnv);
 //    avfilter_register_all();
     avformat_network_init();
 pd->video_render_ctx = video_render_ctx_create();
+
+    if (pd->video_render_ctx->window != NULL) {
+        ANativeWindow_release(pd->video_render_ctx->window);
+    }
+    ANativeWindow *sur = ANativeWindow_fromSurface(env, surface);
+    pd->video_render_ctx->set_window(pd->video_render_ctx, sur);
+
     pd->main_looper = ALooper_forThread();
 pipe(pd->pipe_fd);
   if (ALooper_addFd(pd->main_looper, pd->pipe_fd[0], ALOOPER_POLL_CALLBACK, ALOOPER_EVENT_INPUT,
@@ -741,7 +749,8 @@ pipe(pd->pipe_fd);
     // pd->change_status = change_status;
     pd->send_message = send_message;
     pd->on_error = on_error_cb;
-    reset_pd(pd);
+
+    reset_pd(pd);//存疑，是否需要重置？
 
     pd->mediacodec_ctx =create_mediacodec_context(pd);
 
