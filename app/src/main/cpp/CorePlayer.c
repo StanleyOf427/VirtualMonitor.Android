@@ -231,6 +231,12 @@ typedef struct struct_statistics {
     uint8_t *ret_buffer;
     jobject ret_buffer_java;
 } statistics;
+
+typedef struct H264ConvertState {
+    uint32_t nal_len;
+    uint32_t nal_pos;
+} H264ConvertState;
+
 #pragma endregion
 
 #pragma region 工具函数
@@ -274,6 +280,269 @@ void statistics_reset(statistics *s) {
     s->bytes = 0;
     s->frames = 0;
 }
+
+void mediacodec_start(player_data *pd){
+    mediacodec_context *ctx = pd->mediacodec_ctx;
+    while(pd->video_render_ctx->texture_window == NULL){
+        usleep(10000);
+    }
+    media_status_t ret = AMediaCodec_configure(ctx->codec, ctx->format, pd->video_render_ctx->texture_window, NULL, 0);
+    if (ret != AMEDIA_OK) {
+        LOGE("open mediacodec failed \n");
+    }
+    ret = AMediaCodec_start(ctx->codec);
+    if (ret != AMEDIA_OK) {
+        LOGE("open mediacodec failed \n");
+    }
+}
+
+
+int mediacodec_receive_frame(player_data *pd, AVFrame *frame) {
+    mediacodec_context *ctx = pd->mediacodec_ctx;
+    AMediaCodecBufferInfo info;
+    int output_ret = 1;
+    ssize_t outbufidx = AMediaCodec_dequeueOutputBuffer(ctx->codec, &info, 0);
+    if (outbufidx >= 0) {
+            frame->pts = info.presentationTimeUs;
+            frame->format = XL_PIX_FMT_EGL_EXT;
+            frame->width = pd->width;
+            frame->linesize[0] = pd->width;
+            frame->height = pd->height;
+            frame->HW_BUFFER_ID = outbufidx;
+            output_ret = 0;
+    } else {
+        switch (outbufidx) {
+            case AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED: {
+                int pix_format = -1;
+                AMediaFormat *format = AMediaCodec_getOutputFormat(ctx->codec);
+                AMediaFormat_getInt32(format, AMEDIAFORMAT_KEY_WIDTH, &ctx->width);
+                AMediaFormat_getInt32(format, AMEDIAFORMAT_KEY_HEIGHT, &ctx->height);
+                AMediaFormat_getInt32(format, AMEDIAFORMAT_KEY_COLOR_FORMAT, &pix_format);
+                //todo 仅支持了两种格式
+                switch (pix_format) {
+                    case 19:
+                        ctx->pix_format = AV_PIX_FMT_YUV420P;
+                        break;
+                    case 21:
+                        ctx->pix_format = AV_PIX_FMT_NV12;
+                        break;
+                    default:
+                        break;
+                }
+                output_ret = -2;
+                break;
+            }
+            case AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED:
+                break;
+            case AMEDIACODEC_INFO_TRY_AGAIN_LATER:
+                break;
+            default:
+                break;
+        }
+
+    }
+    return output_ret;
+}
+
+int frame_queue_put(frame_queue *queue, AVFrame *frame){
+    pthread_mutex_lock(queue->mutex);
+    while(queue->count == queue->size){
+        pthread_cond_wait(queue->cond, queue->mutex);
+    }
+    queue->frames[queue->writeIndex] = frame;
+    queue->writeIndex = (queue->writeIndex + 1) % queue->size;
+    queue->count++;
+    pthread_mutex_unlock(queue->mutex);
+    return 0;
+}
+
+void frame_queue_flush(frame_queue *queue, frame_pool *pool){
+    pthread_mutex_lock(queue->mutex);
+    while(queue->count > 0){
+        AVFrame * frame = queue->frames[queue->readIndex];
+        if(frame != &queue->flush_frame){
+            frame_pool_unref_frame(pool, frame);
+        }
+        queue->readIndex = (queue->readIndex + 1) % queue->size;
+        queue->count--;
+    }
+    queue->readIndex = 0;
+    queue->frames[0] = &queue->flush_frame;
+    queue->writeIndex = 1;
+    queue->count = 1;
+    pthread_cond_signal(queue->cond);
+    pthread_mutex_unlock(queue->mutex);
+}
+
+AVFrame * frame_pool_get_frame(frame_pool *pool){
+    AVFrame * p = &pool->frames[pool->index];
+    pool->index = (pool->index + 1) % pool->size;
+    pool->count ++;
+    return p;
+}
+
+
+static void convert_h264_to_annexb( uint8_t *p_buf, size_t i_len,
+                                    size_t i_nal_size,
+                                    H264ConvertState *state )
+{
+    if( i_nal_size < 3 || i_nal_size > 4 )
+        return;
+
+    /* NAL 大小 3-4 */
+    while( i_len > 0 )
+    {
+        if( state->nal_pos < i_nal_size ) {
+            unsigned int i;
+            for( i = 0; state->nal_pos < i_nal_size && i < i_len; i++, state->nal_pos++ ) {
+                state->nal_len = (state->nal_len << 8) | p_buf[i];
+                p_buf[i] = 0;
+            }
+            if( state->nal_pos < i_nal_size )
+                return;
+            p_buf[i - 1] = 1;
+            p_buf += i;
+            i_len -= i;
+        }
+        if( state->nal_len > INT_MAX )
+            return;
+        if( state->nal_len > i_len )
+        {
+            state->nal_len -= i_len;
+            return;
+        }
+        else
+        {
+            p_buf += state->nal_len;
+            i_len -= state->nal_len;
+            state->nal_len = 0;
+            state->nal_pos = 0;
+        }
+    }
+}
+
+
+int mediacodec_send_packet(player_data *pd, AVPacket *packet) {
+    mediacodec_context *ctx = pd->mediacodec_ctx;
+    if (packet == NULL) { return -2; }
+    uint32_t keyframe_flag = 0;
+//    av_packet_split_side_data(packet);
+    int64_t time_stamp = packet->pts;
+    if (!time_stamp && packet->dts)
+        time_stamp = packet->dts;
+    if (time_stamp > 0) {
+        time_stamp = av_rescale_q(time_stamp, pd->format_context->streams[pd->video_index]->time_base,
+                                  AV_TIME_BASE_Q);
+    } else {
+        time_stamp = 0;
+    }
+    if (ctx->codec_id == AV_CODEC_ID_H264 ||
+        ctx->codec_id == AV_CODEC_ID_HEVC) {
+        H264ConvertState convert_state = {0, 0};
+        convert_h264_to_annexb(packet->data, (size_t) packet->size, ctx->nal_size, &convert_state);
+    }
+    if ((packet->flags | AV_PKT_FLAG_KEY) > 0) {
+        keyframe_flag |= 0x1;
+    }
+    ssize_t id = AMediaCodec_dequeueInputBuffer(ctx->codec, 1000000);
+    media_status_t media_status;
+    size_t size;
+    if (id >= 0) {
+        uint8_t *buf = AMediaCodec_getInputBuffer(ctx->codec, (size_t) id, &size);
+        if (buf != NULL && size >= packet->size) {
+            memcpy(buf, packet->data, (size_t) packet->size);
+            media_status = AMediaCodec_queueInputBuffer(ctx->codec, (size_t) id, 0, (size_t) packet->size,
+                                                        (uint64_t) time_stamp,
+                                                        keyframe_flag);
+            if (media_status != AMEDIA_OK) {
+                LOGE("AMediaCodec_queueInputBuffer error. status ==> %d", media_status);
+                return (int) media_status;
+            }
+        }
+    }else if(id == AMEDIACODEC_INFO_TRY_AGAIN_LATER){
+        return -1;
+    }else{
+        LOGE("input buffer id < 0  value == %zd", id);
+    }
+    return 0;
+}
+
+void * video_decode_thread(void * data){
+    prctl(PR_SET_NAME, __func__);
+    player_data * pd = (player_data *)data;
+    (*pd->vm)->AttachCurrentThread(pd->vm, &pd->mediacodec_ctx->jniEnv, NULL);
+    mediacodec_start(pd);
+    int ret;
+    AVPacket * packet = NULL;
+    AVFrame * frame = frame_pool_get_frame(pd->video_frame_pool);
+    while (pd->error_code == 0) {
+        ret = mediacodec_receive_frame(pd, frame);
+            if (ret == 0) {
+                frame_queue_put(pd->video_frame_queue, frame);
+                frame = frame_pool_get_frame(pd->video_frame_pool);
+            }else if(ret == 1) {
+                if(packet == NULL){
+                    packet = packet_queue_get(pd->video_packet_queue);
+                }
+                // buffer empty ==> wait  10ms
+                // eof          ==> break
+                if(packet == NULL){
+                    if(pd->eof){
+                        break;
+                    }else{
+                        usleep(BUFFER_EMPTY_SLEEP_US);
+                        continue;
+                    }
+                }
+                // seek
+                if(packet == &pd->video_packet_queue->flush_packet){
+                    frame_queue_flush(pd->video_frame_queue, pd->video_frame_pool);
+                     
+                     #if __ANDROID_API__ >= NDK_MEDIACODEC_VERSION
+                     mediacodec_context *ctx = pd->mediacodec_ctx;
+                    AMediaCodec_flush(ctx->codec);
+    #else
+    JNIEnv *jniEnv = pd->mediacodec_ctx->jniEnv;
+    xl_java_class * jc = pd->jc;
+    (*jniEnv)->CallStaticVoidMethod(jniEnv, jc->HwDecodeBridge, jc->codec_flush);
+#endif
+                    packet = NULL;
+                    continue;
+                }
+                if(0 == mediacodec_send_packet(pd, packet)){
+    av_packet_unref(packet);
+    pool->count--;
+                        packet = NULL;
+                }else{
+                    // some device AMediacodec input buffer ids count < frame_queue->size
+                    // when pause   frame_queue not full
+                    // thread will not block in  "xl_frame_queue_put" function
+                    if(pd->status == PAUSED){
+                        usleep(NULL_LOOP_SLEEP_US);
+                    }
+                }
+
+            }else if(ret == -2) {
+                //frame = xl_frame_pool_get_frame(pd->video_frame_pool);
+            }else {
+                pd->on_error(pd, XL_ERROR_VIDEO_HW_MEDIACODEC_RECEIVE_FRAME);
+                break;
+            }
+    }
+#if __ANDROID_API__ >= NDK_MEDIACODEC_VERSION
+    AMediaCodec_stop(pd->mediacodec_ctx->codec);
+    #else
+JNIEnv *jniEnv = pd->mediacodec_ctx->jniEnv;
+    xl_java_class * jc = pd->jc;
+    (*jniEnv)->CallStaticVoidMethod(jniEnv, jc->HwDecodeBridge, jc->codec_stop);
+#endif
+
+    (*pd->vm)->DetachCurrentThread(pd->vm);
+    LOGI("thread ==> %s exit", __func__);
+    return NULL;
+}
+
+
 
 #pragma region 资源释放
 void frame_queue_free(frame_queue *queue){
@@ -613,7 +882,7 @@ static int message_callback(int fd, int events, void *data) {
 
 
 mediacodec_context *create_mediacodec_context(player_data *pd) {
-    xl_mediacodec_context *ctx = (xl_mediacodec_context *) malloc(sizeof(xl_mediacodec_context));
+    mediacodec_context *ctx = (mediacodec_context *) malloc(sizeof(mediacodec_context));
     AVCodecParameters *codecpar = pd->format_context->streams[pd->video_index]->codecpar;
     ctx->width = codecpar->width;
     ctx->height = codecpar->height;
@@ -748,7 +1017,66 @@ pipe(pd->pipe_fd);
 #pragma endregion
 
 #pragma region开始解码播放
+    pd->format_context = avformat_alloc_context();
+    pd->format_context->interrupt_callback.callback = av_format_interrupt_cb;
+    pd->format_context->interrupt_callback.opaque = pd;
+        if (avformat_open_input(&pd->format_context, url, NULL, NULL) != 0) {
+        LOGE("can not open url\n");
+        ret = 100;
+        goto fail;
+    }
+   if (avformat_find_stream_info(pd->format_context, NULL) < 0) {
+        LOGE("can not find stream\n");
+        ret = 101;
+        goto fail;
+    }
+    i = av_find_best_stream(pd->format_context, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
+    if (i != AVERROR_STREAM_NOT_FOUND) {
+        pd->video_index = i;
+        pd->av_track_flags |= XL_HAS_VIDEO_FLAG;
+    }
+   
+    AVCodecParameters *codecpar;
 
+    float buffer_time_length = pd->buffer_time_length;
+
+ if (pd->av_track_flags & HAS_VIDEO_FLAG) {
+        codecpar = pd->format_context->streams[pd->video_index]->codecpar;
+        pd->width = codecpar->width;
+        pd->height = codecpar->height;
+
+        // if (pd->force_sw_decode) {
+        //     pd->is_sw_decode = true;
+        // } else {
+        //     switch (codecpar->codec_id) {
+        //         case AV_CODEC_ID_H264:
+        //         // case AV_CODEC_ID_HEVC:
+        //         // case AV_CODEC_ID_MPEG4:
+        //         // case AV_CODEC_ID_VP8:
+        //         // case AV_CODEC_ID_VP9:
+        //         // case AV_CODEC_ID_H263:
+        //             break;
+        //         default:
+        //             break;
+        //     }
+        // }
+        
+        // ret = codec_init(pd);
+
+        if (ret != 0) {
+            goto fail;
+        }
+        AVStream *v_stream = pd->format_context->streams[pd->video_index];
+        AVDictionaryEntry *m = NULL;
+        
+    }
+    set_buffer_time(pd);
+
+    pthread_create(&pd->read_stream_thread, NULL, read_thread, pd);
+    if (pd->av_track_flags & HAS_VIDEO_FLAG) {
+        pthread_create(&pd->video_decode_thread, NULL, video_decode_thread, pd);
+        pthread_create(&pd->gl_thread, NULL, player_gl_thread, pd);
+    }
 
 #pragma endregion
 
