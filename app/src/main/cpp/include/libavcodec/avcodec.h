@@ -1526,7 +1526,7 @@ typedef struct AVCodecContext {
 #endif
 
 #if FF_API_STAT_BITS
-    /* statistics, used for 2-pass encoding */
+    /* player_statistics, used for 2-pass encoding */
     attribute_deprecated
     int mv_bits;
     attribute_deprecated
@@ -1550,14 +1550,14 @@ typedef struct AVCodecContext {
 #endif
 
     /**
-     * pass1 encoding statistics output buffer
+     * pass1 encoding player_statistics output buffer
      * - encoding: Set by libavcodec.
      * - decoding: unused
      */
     char *stats_out;
 
     /**
-     * pass2 encoding statistics input buffer
+     * pass2 encoding player_statistics input buffer
      * Concatenated stuff from stats_out of pass1 should be placed here.
      * - encoding: Allocated/set/freed by user.
      * - decoding: unused
@@ -2092,7 +2092,7 @@ typedef struct AVCodecContext {
     const AVCodecDescriptor *codec_descriptor;
 
     /**
-     * Current statistics for PTS correction.
+     * Current player_statistics for PTS correction.
      * - decoding: maintained and used by libavcodec, not intended to be used by user apps
      * - encoding: unused
      */
