@@ -471,7 +471,7 @@ private TCPServer _tcpserver;
             case KeyEvent.KEYCODE_BACK:    //返回键
                 Log.d(TAG,"back--->");
 
-                if (lastClickTime <= 0) {
+             /*   if (lastClickTime <= 0) {
                     Toast.makeText(this, "再按一次后退键退出应用", Toast.LENGTH_SHORT).show();
                     lastClickTime = System.currentTimeMillis();
                 }
@@ -484,7 +484,9 @@ private TCPServer _tcpserver;
                         Toast.makeText(this, "再按一次后退键退出应用", Toast.LENGTH_SHORT).show();
                         lastClickTime = System.currentTimeMillis();
                     }
-                }
+                }*/
+
+
                 break;
 
             case KeyEvent.KEYCODE_SETTINGS: //设置键
@@ -573,8 +575,8 @@ private TCPServer _tcpserver;
                 Log.d(TAG, "voice up--->");
 
 //测试使用
-                AnalyseData();
-                StartPlay();
+//                AnalyseData();
+//                StartPlay();
 
                 //region 暂时放这里
 //                Log.d(TAG,JNIUtils.stringFromJNI());

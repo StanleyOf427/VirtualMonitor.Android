@@ -111,7 +111,6 @@ typedef struct ekf_context_struct {
     ALooper *looper;
     ASensorEventQueue *event_queue;
     pthread_mutex_t * lock;
-    struct timeval last_gyro_ts;
 } ekf_context;
 static ekf_context * c;
 
@@ -244,7 +243,7 @@ typedef struct struct_model {
     int frame_rotation;
 
     //only VR Model use
-    GLfloat view_matrix_r[16];
+//    GLfloat view_matrix_r[16];
 //    xl_eye left_eye, right_eye;
 //    xl_glsl_program_distortion * program_distortion;
     GLuint frame_texture_id;
@@ -2445,7 +2444,7 @@ void *player_gl_thread(void *data) {
 JNIEXPORT int JNICALL
 Java_com_stanley_virtualmonitor_JNIUtils_CorePlayer(JNIEnv *env, jobject player_instance, jobject surface, jstring input_url,int samplerate)
 {
-    int ret;
+    int ret,i;
     #pragma region 初始化部分
     player_data *pd = (player_data *) malloc(sizeof(player_data));
     pd->jniEnv = env;
@@ -2552,8 +2551,15 @@ pipe(pd->pipe_fd);
         pthread_create(&pd->video_decode_thread, NULL, video_decode_thread, pd);
         pthread_create(&pd->gl_thread, NULL, player_gl_thread, pd);
     }
+    pd->change_status(pd, PLAYING);
 
 #pragma endregion
 
-}
+    return ret;
 
+    fail:
+    if (pd->format_context) {
+        avformat_close_input(&pd->format_context);
+    }
+    return ret;
+}
