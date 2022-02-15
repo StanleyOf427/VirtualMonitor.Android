@@ -18,6 +18,6 @@ Build Environment
 
     IDE:Android Studio 2020.3.1 Patch 2(Windows or Linux)
     NDK:R21
-    SDK:R20(Android7.0)
+    SDK:R21(Android7.1)
     Gradle:7.2(Windows),7.0.2(Linux)
     Gradle plug-in:7.0.2

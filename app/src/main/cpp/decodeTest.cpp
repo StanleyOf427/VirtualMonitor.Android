@@ -38,7 +38,7 @@ extern "C" JNIEXPORT int JNICALL
 Java_com_stanley_virtualmonitor_JNIUtils_testDecode(JNIEnv *env, jclass jcls, jstring input_jstr, jobject surface)
 {
   const char *input_cstr= env->GetStringUTFChars(input_jstr, nullptr);
-    LOGE("打开路径：%s", input_cstr);
+  LOGE("打开路径：%s", input_cstr);
 #pragma region 解码部分
 
 #pragma region 1.注册组件

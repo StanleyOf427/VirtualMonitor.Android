@@ -6,22 +6,27 @@ include_directories(
         include#因为和CMakeLists.txt在同一级，所以直接写include
 )
 
+# =====  OPENGL  =====
+set(OPENGL_LIB GLESv2)
 
 #add_library(native-lib
 #        SHARED
 #        native-lib.cpp)
-
-add_library(decodeTest
-        SHARED
-        decodeTest.cpp)
-
-add_library(CorePlayer
-        SHARED
-        CorePlayer.c)
-
 find_library(
         log-lib
         log)
+find_library(
+        android-lib
+        android)
+find_library(
+        glesv2-lib
+        GLESv2)
+find_library(
+        egl-lib
+        EGL)
+find_library(
+        media-ndk
+        mediandk)
 
 #1.定义一个变量avcodec
 add_library(
@@ -29,6 +34,7 @@ add_library(
         SHARED
         IMPORTED
 )
+
 #给avcodec这个变量赋值
 #set_target_properties(avcodec PROPERTIES IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/../../main/jniLibs/${ANDROID_ABI}/libavcodec-58.so)
 set_target_properties(avcodec PROPERTIES IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/../../main/jniLibs/libavcodec.so)
@@ -49,7 +55,6 @@ add_library(
 )
 #set_target_properties(avfilter PROPERTIES IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/../../main/jniLibs/${ANDROID_ABI}/libavfilter-7.so)
 set_target_properties(avfilter PROPERTIES IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/../../main/jniLibs/libavfilter.so)
-
 
 #4.
 add_library(
@@ -94,25 +99,35 @@ add_library(
 #set_target_properties(swscale PROPERTIES IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/../../main/jniLibs/${ANDROID_ABI}/libswscale-5.so)
 set_target_properties(swscale PROPERTIES IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/../../main/jniLibs/libswscale.so)
 
-#9.
+#add_library(decodeTest
+#        SHARED
+#        decodeTest.cpp)
 
+add_library(CorePlayer
+        SHARED
+        CorePlayer.c)
+
+#9.
 #混合编译到所需库中
 target_link_libraries(
-        decodeTest
+#        decodeTest
         CorePlayer
-        ${log-lib}
+
         avcodec#1
         avdevice#2
         avfilter#3
         avformat#4
         avutil#5
-#        postproc#6
+#       postproc#6
         swresample#7
         swscale#8
 
+        ${log-lib}
+        ${glesv2-lib}
+        ${egl-lib}
+        ${media-ndk}
         -landroid
 )
-
 #————————————————
 #版权声明：本文为CSDN博主「自己的MVP」的原创文章，遵循CC 4.0 BY-SA版权协议，转载请附上原文出处链接及本声明。
 #原文链接：https://blog.csdn.net/qq_35014796/article/details/115789252

@@ -10,30 +10,31 @@
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
+
  */
+
 package com.stanley.virtualmonitor;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
+import android.content.pm.PackageManager;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.app.Activity;
+import androidx.annotation.NonNull;
 
 import android.os.Bundle;
-
 import android.view.KeyEvent;
-
 import android.view.MotionEvent;
-
 import android.view.View;
-
 import android.widget.Button;
-
 import android.widget.Toast;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
+import android.Manifest;
 import android.os.Bundle;
 import android.media.MediaPlayer;
 import android.os.Handler;
@@ -43,9 +44,11 @@ import android.view.KeyEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.widget.RelativeLayout;
-import android.widget.Toast;
+import android.widget.Toast;;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 
@@ -86,7 +89,6 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     private boolean flag = false;
 private TCPServer _tcpserver;
 
-
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -124,6 +126,33 @@ private TCPServer _tcpserver;
 //        timer.schedule(task, 2000, 2000);
 
         mediaCodecBufferInfo = new MediaCodec.BufferInfo();
+
+
+        //权限检查
+      checkPermissions();
+    }
+
+    private void checkPermissions() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE}, 10086);
+        } else {
+            //
+        }
+    }
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        switch (requestCode) {
+            case 10086:
+                if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                   //
+                } else {
+                    checkPermissions();
+                }
+                break;
+            default:
+                super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+                break;
+        }
     }
 
 
@@ -270,6 +299,7 @@ private TCPServer _tcpserver;
 
         }
     }
+
 
 
 
@@ -442,6 +472,8 @@ private TCPServer _tcpserver;
     //endregion
 
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        String path = "/storage/emulated/0/DCIM/20210604-1504-21 (copy).mp4";
+//                String path = "http://storage.googleapis.com/exoplayer-test-media-1/mkv/android-screens-lavf-56.36.100-aac-avc-main-1280x720.mkv";
 
         switch (keyCode) {
 
@@ -453,7 +485,7 @@ private TCPServer _tcpserver;
 //                if(_tcpserver!=null)
 //                    _tcpserver.SendMsg(String.valueOf(i++));
 //                InitDecoder();
-                AnalyseData();
+//                AnalyseData();
 //                new Thread(new Runnable() {
 //                    @Override
 //                    public void run() {
@@ -466,7 +498,13 @@ private TCPServer _tcpserver;
 //                        RenderView();
 //                    }
 //                }).start();
-                StartPlay();
+//                StartPlay();
+
+
+                    surfaceView = (SurfaceView) findViewById(R.id.testview);
+                    holder = surfaceView.getHolder();
+                JNIUtils.CorePlayer(holder.getSurface(),path,60);
+
                 break;
             case KeyEvent.KEYCODE_BACK:    //返回键
                 Log.d(TAG,"back--->");
@@ -485,8 +523,10 @@ private TCPServer _tcpserver;
                         lastClickTime = System.currentTimeMillis();
                     }
                 }*/
-
-
+//
+                surfaceView = (SurfaceView) findViewById(R.id.testview);
+                holder = surfaceView.getHolder();
+                JNIUtils.CorePlayer(holder.getSurface(),path,60);
                 break;
 
             case KeyEvent.KEYCODE_SETTINGS: //设置键
@@ -543,7 +583,6 @@ private TCPServer _tcpserver;
 //                        Log.d(TAG, (k+1)+"  "+Integer.toHexString((header_pps[k] & 0xFF) + 0x100).substring(1)+
 //                                "  "+Integer.toBinaryString((header_pps[k] & 0xFF) + 0x100).substring(1));
                 }
-
                 break;
 
             case KeyEvent.KEYCODE_DPAD_UP:   //向上键

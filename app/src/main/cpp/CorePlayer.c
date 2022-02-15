@@ -1,21 +1,21 @@
 /**Create by Stanley
- * 
+ *
  * hardware decode and render in native level
  * */
 /*extern "C"{
-
 }*/
 #include "include/libavcodec/avcodec.h"
 #include "include/libavformat/avformat.h"
 #include "include/libavutil/imgutils.h"
 #include "include/libavutil/opt.h"
+#include  "include/libavutil/frame.h"
 #include "include/libswresample/swresample.h"
 #include "include/libswscale/swscale.h"
 
  #include <android/native_window.h>
  #include <android/native_window_jni.h>
 #include <android/looper.h>
- #include <android/log.h>
+#include <android/log.h>
 #include  <android/sensor.h>
 
 #include <unistd.h>
@@ -23,9 +23,14 @@
 
 #include <pthread.h>
 #include <sys/prctl.h>
-#include  <EGL/egl.h>
 #include  <GLES2/gl2.h>
 #include  <GLES2/gl2ext.h>
+#include <GLES2/gl2platform.h>
+#include <GLES3/gl3.h>
+#include  <EGL/egl.h>
+
+#include <stdbool.h>
+#include <stdlib.h>
 
 #if __ANDROID_API__ >= NDK_MEDIACODEC_VERSION
 #include <media/NdkMediaCodec.h>
@@ -86,7 +91,7 @@ static void init_expand_oes();
 
 #pragma region 枚举类型
 typedef enum {
-    UNINIT = -1, IDEL = 0, PLAYING, PAUSED, BUFFER_EMPTY, BUFFER_FULL
+    UNINIT = -1, IDEL = 0, PLAYING=1, PAUSED=2, BUFFER_EMPTY=3, BUFFER_FULL=4
 } PlayStatus;
 typedef enum {
     NONE = -1,Rect = 0, Ball = 1, VR = 2, Planet = 3, Architecture = 4, Expand = 5
@@ -1153,7 +1158,7 @@ void * video_decode_thread(void * data){
                 // seek
                 if(packet == &pd->video_packet_queue->flush_packet){
                     frame_queue_flush(pd->video_frame_queue, pd->video_frame_pool);
-                     
+
                      #if __ANDROID_API__ >= NDK_MEDIACODEC_VERSION
                      mediacodec_context *ctx = pd->mediacodec_ctx;
                     AMediaCodec_flush(ctx->codec);
@@ -1244,7 +1249,8 @@ void video_render_ctx_reset(video_render_context * ctx){
     ctx->width = ctx->height = 1;
 }
 
-static void reset_pd(player_data *pd) {
+static void
+reset_pd(player_data *pd) {
     if (pd == NULL) return;
     pd->eof = false;
     pd->video_index = -1;
@@ -1257,7 +1263,11 @@ static void reset_pd(player_data *pd) {
     statistics_reset(pd->statistics);
     pd->error_code = 0;
     packet_pool_reset(pd->packet_pool);
-    pd->change_status(pd, IDEL);
+//    pd->change_status(pd, IDEL);
+        pd->status = IDEL;
+//    (*pd->jniEnv)->CallVoidMethod(pd->jniEnv, pd->player, pd->jc->player_onPlayStatusChanged,
+//                                  IDEL);
+
     video_render_ctx_reset(pd->video_render_ctx);
 }
 
@@ -1662,7 +1672,7 @@ static int stop(player_data *pd) {
     }
 
     clean_queues(pd);
-    avformat_close_input(&pd->format_context);
+        avformat_close_input(pd->format_context);
     reset(pd);
     LOGI("player stoped");
     return 0;
@@ -1679,8 +1689,9 @@ void change_status(player_data *pd, PlayStatus status) {
     } else {
         pd->status = status;
     }
-    (*pd->jniEnv)->CallVoidMethod(pd->jniEnv, pd->player, pd->jc->player_onPlayStatusChanged,
-                                  status);
+    //更新UI界面部分，暂存
+//    (*pd->jniEnv)->CallVoidMethod(pd->jniEnv, pd->player, pd->jc->player_onPlayStatusChanged,
+//                                  status);
 }
 
 static void on_error(player_data *pd) {
@@ -2484,9 +2495,9 @@ pipe(pd->pipe_fd);
     pd->send_message = send_message;
     pd->on_error = on_error_cb;
 
-    reset_pd(pd);//存疑，是否需要重置？
+   reset_pd(pd);//存疑，是否需要重置？
 
-    pd->mediacodec_ctx =create_mediacodec_context(pd);
+//    pd->mediacodec_ctx =create_mediacodec_context(pd);
 
 #pragma endregion
 
@@ -2509,7 +2520,7 @@ pipe(pd->pipe_fd);
         pd->video_index = i;
         pd->av_track_flags |= HAS_VIDEO_FLAG;
     }
-   
+
     AVCodecParameters *codecpar;
 
     float buffer_time_length = pd->buffer_time_length;
@@ -2534,15 +2545,17 @@ pipe(pd->pipe_fd);
         //             break;
         //     }
         // }
-        
+
         // ret = codec_init(pd);
+        //更改为此处初始化
+     pd->mediacodec_ctx =create_mediacodec_context(pd);
 
         if (ret != 0) {
             goto fail;
         }
         AVStream *v_stream = pd->format_context->streams[pd->video_index];
         AVDictionaryEntry *m = NULL;
-        
+
     }
     set_buffer_time(pd);
 
